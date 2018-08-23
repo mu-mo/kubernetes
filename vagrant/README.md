@@ -36,11 +36,11 @@ vagrant init ubuntu-xenial-docker
 vagrant up
 ```
 
-也可以使用自定义 Vagrantfile 配置文件来实现定制，这里配置的网络是本地局域网，使用DHCP，并且保持分配的IP地址，注意此处的 "eno1"  会因为机器的不同而不同。
+也可以使用自定义 Vagrantfile 配置文件来实现定制，这里配置的网络是本地局域网，使用DHCP，并且保持分配的IP地址，注意此处的 "wlp4s0"  会因为机器的不同而不同。
 
 ```
 Vagrant.configure("2") do |config|
-  config.vm.network "public_network", use_dhcp_assigned_default_route: true, :bridge => "eno1"
+  config.vm.network "public_network", use_dhcp_assigned_default_route: true, :bridge => "wlp4s0"
   config.vm.define :master do |master|
     master.vm.provider "virtualbox" do |v|
           v.customize ["modifyvm", :id, "--name", "master", "--memory", "1024"]
@@ -79,7 +79,7 @@ vagrant init
 
 ```
 Vagrant.configure("2") do |config|
-  config.vm.network "public_network", use_dhcp_assigned_default_route: true, :bridge => "eno1"
+  config.vm.network "public_network", use_dhcp_assigned_default_route: true, :bridge => "wlp4s0"
   config.vm.define :master do |node|
     node.vm.provider "virtualbox" do |v|
           v.customize ["modifyvm", :id, "--name", "master", "--memory", "2048"]
@@ -119,3 +119,68 @@ image.png
 ```
 vagrant ssh master
 ```
+## 登录虚拟机
+
++ 法一
+
+  ```
+  cd /path/to/your/vagrant/dir
+  vagrant ssh master  # master 为 vm.define的名字
+  ```
+
++ 法二
+
+  ```
+  ssh vagrant@127.0.0.1 -p 2222  # 初始化的时候会显示端口
+  ```
+
+## 测试
+
++ 登录虚拟机
+
++ 查询IP 
+
+  `ifconfig -a`
+
+  显示如下信息：
+
+  ```
+  docker0   Link encap:Ethernet  HWaddr 02:42:27:c6:0a:45  
+            inet addr:172.17.0.1  Bcast:0.0.0.0  Mask:255.255.0.0
+            UP BROADCAST MULTICAST  MTU:1500  Metric:1
+            RX packets:0 errors:0 dropped:0 overruns:0 frame:0
+            TX packets:0 errors:0 dropped:0 overruns:0 carrier:0
+            collisions:0 txqueuelen:0 
+            RX bytes:0 (0.0 B)  TX bytes:0 (0.0 B)
+
+  enp0s3    Link encap:Ethernet  HWaddr 08:00:27:55:ed:4b  
+            inet addr:10.0.2.15  Bcast:10.0.2.255  Mask:255.255.255.0
+            inet6 addr: fe80::a00:27ff:fe55:ed4b/64 Scope:Link
+            UP BROADCAST RUNNING MULTICAST  MTU:1500  Metric:1
+            RX packets:750 errors:0 dropped:0 overruns:0 frame:0
+            TX packets:593 errors:0 dropped:0 overruns:0 carrier:0
+            collisions:0 txqueuelen:1000 
+            RX bytes:87751 (87.7 KB)  TX bytes:83116 (83.1 KB)
+
+  enp0s8    Link encap:Ethernet  HWaddr 08:00:27:82:58:7b  
+            inet addr:192.168.3.138  Bcast:192.168.3.255  Mask:255.255.255.0
+            UP BROADCAST RUNNING MULTICAST  MTU:1500  Metric:1
+            RX packets:141 errors:0 dropped:0 overruns:0 frame:0
+            TX packets:20 errors:0 dropped:0 overruns:0 carrier:0
+            collisions:0 txqueuelen:1000 
+            RX bytes:41632 (41.6 KB)  TX bytes:3496 (3.4 KB)
+
+  lo        Link encap:Local Loopback  
+            inet addr:127.0.0.1  Mask:255.0.0.0
+            inet6 addr: ::1/128 Scope:Host
+            UP LOOPBACK RUNNING  MTU:65536  Metric:1
+            RX packets:0 errors:0 dropped:0 overruns:0 frame:0
+            TX packets:0 errors:0 dropped:0 overruns:0 carrier:0
+            collisions:0 txqueuelen:1 
+            RX bytes:0 (0.0 B)  TX bytes:0 (0.0 B)
+
+  ```
+
+  可以看到此处IP 为 `192.168.3.138 ` 
+
++ 退出虚拟机，ping 一下IP

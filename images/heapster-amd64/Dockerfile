@@ -1,2 +1,4 @@
 FROM gcr.io/google_containers/heapster-amd64:v1.5.0
-MAINTAINER Mosaicwang <mosaicwang@gmail.com>
+LABEL maintainer="yun_tofar@qq.com"
+LABEL version="1.0"
+LABEL description="kubernetes"
