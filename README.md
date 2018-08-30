@@ -1,18 +1,42 @@
 # 使用kubeadm 部署 Kubernetes(国内环境)
 
-效果网站：https://k8s.mu-mo.top （个人域名），登录token可以找我要
+其他方案选择：
 
-若想在本地测试可通过 vagrant 创建虚拟机模拟集群测试，见附录
++ 不用工具，从零开始，请参考：[和我一步步部署 kubernetes 集群](https://github.com/opsnull/follow-me-install-kubernetes-cluster)
++ 若只是在单机上体验，可以使用Minikbe，请参考：[官方 Install Mikikube](https://kubernetes.io/docs/tasks/tools/install-minikube/)
+
+官网: https://kubernetes.io/
+
+Vagrant：若想在本地测试可通过 vagrant 创建虚拟机模拟集群测试，见附录
 
 官方教程：https://kubernetes.io/docs/setup/independent/install-kubeadm/
 
-此处未采用官方教程（需要翻墙），这里仅介绍国内环境安装详细过程
+**此处未采用官方教程（需要翻墙），这里仅介绍国内环境安装详细过程**
 
-注：如若没有注明，则默认采用 Ubuntu16.04 环境
+注：如若没有注明，则默认采用 Ubuntu16.04 +环境
 
 测试时候版本为当时最新版：
 
 + kubernetesv1.11.2
+
+## 服务器配置要求
+
+注：最好所有机器在同一区，这样可以使用内网互通
+
+- 操作系统要求
+  - Ubuntu 16.04+
+  - Debian 9
+  - CentOS 7
+  - RHEL 7
+  - Fedora 25/26 (best-effort)
+  - HypriotOS v1.0.1+
+  - Container Linux (tested with 1800.6.0)
+- 2+ GB RAM
+- 2+ CPUs
+- 所有机器之间通信正常
+- 唯一的hostname, MAC address, and product_uuid
+- 特定的端口开放（安全组和防火墙未将其排除在外）
+- 关闭Swap交换分区
 
 ## 安装 Docker
 
@@ -170,15 +194,15 @@ sysctl -p
 
 Master 和 Node 启动的核心服务分别如下：
 
-| Master 节点             | Node 节点   |
-| ----------------------- | ----------- |
-| etcd-master             | kube-calico |
-| kube-apiserver          | kube-proxy  |
-| kube-controller-manager | other apps  |
-| kube-dns                |             |
-| kube-calico             |             |
-| kube-proxy              |             |
-| kube-scheduler          |             |
+| Master 节点                      | Node 节点                        |
+| -------------------------------- | -------------------------------- |
+| etcd-master                      | Control plane(如：calico,fannel) |
+| kube-apiserver                   | kube-proxy                       |
+| kube-controller-manager          | other apps                       |
+| kube-dns                         |                                  |
+| Control plane(如：calico,fannel) |                                  |
+| kube-proxy                       |                                  |
+| kube-scheduler                   |                                  |
 
 使用如下命令：
 
@@ -248,9 +272,26 @@ done
 >
 > 具体步骤请自行查询，不是本文重点
 
-## 初始化 kubeadm
+## 检查端口是否被占用
 
-注：在开始之前请确保 6443 端口没有被占用
+### Master 节点
+
+| Protocol | Direction | Port Range | Purpose                 | Used By              |
+| -------- | --------- | ---------- | ----------------------- | -------------------- |
+| TCP      | Inbound   | 6443*      | Kubernetes API server   | All                  |
+| TCP      | Inbound   | 2379-2380  | etcd server client API  | kube-apiserver, etcd |
+| TCP      | Inbound   | 10250      | Kubelet API             | Self, Control plane  |
+| TCP      | Inbound   | 10251      | kube-scheduler          | Self                 |
+| TCP      | Inbound   | 10252      | kube-controller-manager | Self                 |
+
+### Worker节点
+
+| Protocol | Direction | Port Range  | Purpose             | Used By             |
+| -------- | --------- | ----------- | ------------------- | ------------------- |
+| TCP      | Inbound   | 10250       | Kubelet API         | Self, Control plane |
+| TCP      | Inbound   | 30000-32767 | NodePort Services** | All                 |
+
+## 初始化 kubeadm
 
 ```
 sudo kubeadm init --kubernetes-version=v1.11.2 --apiserver-advertise-address=<your ip> --pod-network-cidr=192.168.0.0/16
@@ -292,7 +333,7 @@ init 常用主要参数：
 }
 ```
 
-## 安装网络插件
+## 安装网络插件 - Calico
 
 安装镜像：
 
@@ -335,6 +376,28 @@ kube-system   kube-scheduler-iz948lz3o7sz            1/1       Running          
 等待`coredns pod`的状态变成**Running**，就可以继续添加从节点了
 
 ### 加入其他节点
+
+> 默认情况下由于安全原因你的cluster不会调度pods在你的master上。如果你想让你的master也参与调度，run:
+>
+> ```
+> kubectl taint nodes --all node-role.kubernetes.io/master-
+> ```
+>
+> 或者
+>
+> ```
+> kubectl taint nodes k8s-node1 node-role.kubernetes.io/master-
+> ```
+>
+> 可能会有类似如下输出：
+>
+> ```
+> node "test-01" untainted
+> taint "node-role.kubernetes.io/master:" not found
+> taint "node-role.kubernetes.io/master:" not found
+> ```
+>
+> 它将会在那些有它的节点移除 `node-role.kubernetes.io/master` 污染，包括master 节点, 所以之后将可以在任意一个地方调度
 
 ```
 kubeadm join --token <token> <master-ip>:<master-port> --discovery-token-ca-cert-hash sha256:<hash>
@@ -429,6 +492,8 @@ subjects:
 
 ### 登录
 
+![ç»éçé¢](https://jimmysong.io/kubernetes-handbook/images/kubernetes-dashboard-1.7.1-login.jpg)
+
 #### Kubeconfig登录
 
 注：auth 模式不推荐使用
@@ -498,9 +563,16 @@ kubectl -n kube-system describe $(kubectl -n kube-system get secret -n kube-syst
 
 ```
 kubectl -n kube-system describe secret/$(kubectl -n kube-system get secret | grep kubernetes-dashboard-admin | awk '{print $1}') | grep token
+
 ```
 
+若以默认身份登录可能如下：
+
+![é¦é¡µ](https://jimmysong.io/kubernetes-handbook/images/kubernetes-dashboard-1.7.1-default-page.jpg)
+
 ### 集成 heapster
+
+**注：Kubernetes默认master是不参与 pod分配资源的，和正常情况下heapster 需要安装在node节点上，如果你只有master或许无法启动成功**
 
 安装 heapster
 
@@ -543,9 +615,19 @@ wget https://raw.githubusercontent.com/kubernetes/heapster/master/deploy/kube-co
 
 ```
 kubectl create -f ./
+
+
 ```
 
+结果如下：
+
+![img](https://github.com/kubernetes/dashboard/raw/master/docs/dashboard-ui.png)
+
+![å®æ¹ç¨ä¾](http://leonlibraries.github.io/2017/06/15/Kubeadm%E6%90%AD%E5%BB%BAKubernetes%E9%9B%86%E7%BE%A4/demo.jpeg)
+
 ## 官方用例部署
+
+[Sock Shop](https://microservices-demo.github.io/)
 
 官方演示了一个袜子商城，以微服务的形式部署起来
 
@@ -706,6 +788,142 @@ docker load < calico_cni.tar
 sudo kubeadm reset
 ```
 
+### 转换 docker-compose 为 Kubernetes Resources
+
+#### 安装 Kompose
+
+##### Github release
+
+ [GitHub release page](https://github.com/kubernetes/kompose/releases).
+
+```
+# Linux 
+curl -L https://github.com/kubernetes/kompose/releases/download/v1.1.0/kompose-linux-amd64 -o kompose
+
+# macOS
+curl -L https://github.com/kubernetes/kompose/releases/download/v1.1.0/kompose-darwin-amd64 -o kompose
+
+# Windows
+curl -L https://github.com/kubernetes/kompose/releases/download/v1.1.0/kompose-windows-amd64.exe -o kompose.exe
+
+chmod +x kompose
+sudo mv ./kompose /usr/local/bin/kompose
+```
+
+##### Go
+
+Installing using `go get` pulls from the master branch with the latest development changes.
+
+```
+go get -u github.com/kubernetes/kompose
+```
+
+#### [Use Kompose](https://kubernetes.io/docs/tasks/configure-pod-container/translate-compose-kubernetes/#use-kompose)
+
+1. docker-compose.yml
+
+   ```
+     version: "2"
+
+     services:
+
+       redis-master:
+         image: k8s.gcr.io/redis:e2e 
+         ports:
+           - "6379"
+
+       redis-slave:
+         image: gcr.io/google_samples/gb-redisslave:v1
+         ports:
+           - "6379"
+         environment:
+           - GET_HOSTS_FROM=dns
+
+       frontend:
+         image: gcr.io/google-samples/gb-frontend:v4
+         ports:
+           - "80:80"
+         environment:
+           - GET_HOSTS_FROM=dns
+         labels:
+           kompose.service.type: LoadBalancer
+   ```
+
+2. Run the `kompose up` command to deploy to Kubernetes directly, or skip to the next step instead to generate a file to use with `kubectl`.
+
+   ```
+     $ kompose up
+     We are going to create Kubernetes Deployments, Services and PersistentVolumeClaims for your Dockerized application. 
+     If you need different kind of resources, use the 'kompose convert' and 'kubectl create -f' commands instead. 
+
+     INFO Successfully created Service: redis          
+     INFO Successfully created Service: web            
+     INFO Successfully created Deployment: redis       
+     INFO Successfully created Deployment: web         
+
+     Your application has been deployed to Kubernetes. You can run 'kubectl get deployment,svc,pods,pvc' for details.
+   ```
+
+3. To convert the `docker-compose.yml` file to files that you can use with `kubectl`, run `kompose convert` and then `kubectl create -f <output file>`.
+
+   ```
+     $ kompose convert                           
+     INFO Kubernetes file "frontend-service.yaml" created         
+     INFO Kubernetes file "redis-master-service.yaml" created     
+     INFO Kubernetes file "redis-slave-service.yaml" created      
+     INFO Kubernetes file "frontend-deployment.yaml" created      
+     INFO Kubernetes file "redis-master-deployment.yaml" created  
+     INFO Kubernetes file "redis-slave-deployment.yaml" created   
+   ```
+
+   ```
+     $ kubectl create -f frontend-service.yaml,redis-master-service.yaml,redis-slave-service.yaml,frontend-deployment.yaml,redis-master-deployment.yaml,redis-slave-deployment.yaml
+     service "frontend" created
+     service "redis-master" created
+     service "redis-slave" created
+     deployment "frontend" created
+     deployment "redis-master" created
+     deployment "redis-slave" created
+   ```
+
+   Your deployments are running in Kubernetes.
+
+4. Access your application.
+
+   If you’re already using `minikube` for your development process:
+
+   ```
+     $ minikube service frontend
+   ```
+
+   Otherwise, let’s look up what IP your service is using!
+
+   ```
+     $ kubectl describe svc frontend
+     Name:                   frontend
+     Namespace:              default
+     Labels:                 service=frontend
+     Selector:               service=frontend
+     Type:                   LoadBalancer
+     IP:                     10.0.0.183
+     LoadBalancer Ingress:   123.45.67.89
+     Port:                   80      80/TCP
+     NodePort:               80      31144/TCP
+     Endpoints:              172.17.0.4:80
+     Session Affinity:       None
+     No events.
+   ```
+
+   If you’re using a cloud provider, your IP will be listed next to `LoadBalancer Ingress`.
+
+   ```
+     $ curl http://123.45.67.89
+   ```
+
 ### 镜像查询
 
 直接查看相关的yaml中image参数
+
+### 最佳实践
+
+https://kubernetes.io/docs/concepts/configuration/overview/
