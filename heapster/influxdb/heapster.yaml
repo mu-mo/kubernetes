@@ -22,10 +22,22 @@ spec:
       - name: heapster
         image: registry.cn-hangzhou.aliyuncs.com/google_containers/heapster-amd64:v1.5.4
         imagePullPolicy: IfNotPresent
+        volumeMounts:
+        - mountPath: /srv/kubernetes
+          name: auth
+        - mountPath: /home/mu-mo/.kube
+          name: config
         command:
         - /heapster
-        - --source=kubernetes
+        - --source=kubernetes.summary_api:https://kubernetes.default.svc?inClusterConfig=false&kubeletHttps=true&kubeletPort=10250&insecure=true&auth=/home/mu-mo/.kube/config
         - --sink=influxdb:http://monitoring-influxdb.kube-system.svc:8086
+      volumes:
+      - name: auth
+        hostPath:
+          path: /srv/kubernetes
+      - name: config
+        hostPath:
+          path: /home/mu-mo/.kube
 ---
 apiVersion: v1
 kind: Service

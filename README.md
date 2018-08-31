@@ -97,6 +97,14 @@ sudo systemctl restart docker
 + `sudo swapoff -a`
 + 测试：输入`top` 命令，若 KiB Swap一行中 total 显示 0 则关闭成功
 
+> 若想永久关闭：
+>
+> + sudo vim /etc/fstab
+>
+>   注释掉swap那一行
+>
+> + 重启
+
 ## 安装 kubeadm, kubelet and kubectl
 
 权限：root
@@ -591,7 +599,17 @@ wget https://raw.githubusercontent.com/kubernetes/heapster/master/deploy/kube-co
 ```
 --source=kubernetes:https://10.209.3.82:6443   --------改成自己的ip
 --sink=influxdb:http://monitoring-influxdb.kube-system.svc:8086
+
 ```
+
+或者
+
+```
+--source=-source=kubernetes.summary_api:https://kubernetes.default.svc?inClusterConfig=false&kubeletHttps=true&kubeletPort=10250&insecure=true&auth=
+--sink=influxdb:http://monitoring-influxdb.kube-system.svc:8086
+```
+
+
 
 修改所有文件 image 为 `registry.cn-hangzhou.aliyuncs.com/google_containers/`
 
@@ -669,8 +687,7 @@ sudo apt install virtualbox # 若安装失败，多半是Linux内核缺少了hea
 下载 带有docker 的 ubuntu box
 
 ```
-# 添加 box 到本地，默认从官方源中下载指定的 box 并重命名
-vagrant box add ubuntu-xenial-docker comiq/dockerbox
+vagrant box add comiq/dockerbox
 ```
 
 或者 手动在[官方](vagrant box add ubuntu-xenial-docker file:///d:/path/to/file.box)下载之后
@@ -693,24 +710,38 @@ vagrant box add ubuntu-xenial-docker /path/to/file.box
 
 ```
 Vagrant.configure("2") do |config|
-  config.vm.network "public_network", use_dhcp_assigned_default_route: true, :bridge => "wlp4s0"
-  config.vm.define :master do |node|
-    node.vm.provider "virtualbox" do |v|
-          v.customize ["modifyvm", :id, "--name", "master", "--memory", "1200"]
-    end
-    node.vm.box = "ubuntu-xenial-docker"
-    node.vm.hostname = "master"
-    node.vm.synced_folder "/home/mu-mo/公共的", "/home/vagrant/share"
-  end
 
-  config.vm.define :node01 do |node|
-    node.vm.provider "virtualbox" do |v|
-          v.customize ["modifyvm", :id, "--name", "node01", "--memory", "1200"]
-    end
-    node.vm.box = "ubuntu-xenial-docker"
-    node.vm.hostname = "node01"
-    node.vm.synced_folder "/home/mu-mo/公共的", "/home/vagrant/share"
-  end
+	(1..2).each do |i|
+
+		config.vm.define "node#{i}" do |node|
+
+		# 设置虚拟机的Box
+		node.vm.box = "comiq/dockerbox"
+
+		# 设置虚拟机的主机名
+		node.vm.hostname="node#{i}"
+
+		# 设置虚拟机的IP
+		node.vm.network "private_network", ip: "192.168.59.#{i}"
+
+		# 设置主机与虚拟机的共享目录
+		node.vm.synced_folder "~/公共的", "/home/vagrant/share"
+
+		# VirtaulBox相关配置
+		node.vm.provider "virtualbox" do |v|
+
+			# 设置虚拟机的名称
+			v.name = "node#{i}"
+
+			# 设置虚拟机的内存大小  
+			v.memory = 1200
+
+			# 设置虚拟机的CPU个数
+			v.cpus = 1
+		end
+
+		end
+	end
 end
 ```
 
@@ -763,7 +794,6 @@ end
 mkdir vagrant
 cd vagrant
 cp /path/to/vagrantfile Vagrantfile
-vagrant init
 vagrant up
 ```
 
